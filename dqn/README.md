@@ -198,3 +198,11 @@ In summary:
 - flappy bird - vector of numbers as observation (simple dqn with target network, DDQN, dueling DQN, dueling DDQN,
   optuna)
 - flappy bird - matrix of pixel as observation
+
+## Stats
+
+- log: new best episode reward
+- log: episode reward - episode
+- graph: rewards sum per episode - episode number
+- graph: number of steps - episode number
+- graph: episode time - episode number

@@ -8,11 +8,8 @@ Experience = NewType('Experience', Tuple[Tensor, Tensor, Tensor, Tensor, bool])
 
 
 class ExperienceBuffer:
-    def __init__(self, max_len: int, seed=None):
+    def __init__(self, max_len: int):
         self.memory = deque([], maxlen=max_len)
-
-        if seed is not None:
-            random.seed(seed)
 
     def append(self, experience: Experience) -> None:
         self.memory.append(experience)

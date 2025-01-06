@@ -5,6 +5,7 @@ import random
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
+import flappy_bird_gymnasium  # noqa: F401 - used indirectly by gymnasium
 import gymnasium as gym
 import matplotlib
 import matplotlib.pyplot as plt
@@ -17,7 +18,6 @@ from torch.types import Tensor
 from dqn import DQN
 from experience_buffer import ExperienceBuffer, Experience
 
-DATE_FORMAT = '%m-%d %H:%M:%S'
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 FORMATTER = logging.Formatter('%(asctime)s: %(name)s: %(levelname)s: %(message)s')
@@ -30,11 +30,9 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 matplotlib.use('Agg')  # Do not render plots on screen
 
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
 
 class Agent:
-    def __init__(self, config_set_name: str, is_training: bool = True, do_render: bool = False):
+    def __init__(self, config_set_name: str, device_name: str, is_training: bool = True, do_render: bool = False):
         # Configuration ================================================================================================
         with open('config.yml', 'r') as file:
             all_config_sets = yaml.safe_load(file)
@@ -57,6 +55,11 @@ class Agent:
         self.env_make_params: Dict[Any, Any] = config.get('env_make_params', {})
         self.enable_double_dqn: bool = config['enable_double_dqn']
         self.enable_dueling_dqn: bool = config['enable_dueling_dqn']
+        self.seed: bool = config['seed']
+
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
 
         self.is_training = is_training
 
@@ -65,6 +68,8 @@ class Agent:
         self.exp_buffer = ExperienceBuffer(self.exp_buffer_size) if is_training else None
 
         # Neural Network ===============================================================================================
+        self.device = 'cuda' if device_name == 'cuda' and torch.cuda.is_available() else 'cpu'
+
         self.policy_dqn = None
         self.target_dqn = None
         self.loss_fn = nn.MSELoss()
@@ -76,7 +81,7 @@ class Agent:
         self.model_file_name: str = os.path.join(OUTPUT_DIR, f'{self.config_set_name}.pt')
         self.graph_file_name: str = os.path.join(OUTPUT_DIR, f'{self.config_set_name}.png')
 
-        file_handler = logging.FileHandler(self.log_file_name, mode='w')
+        file_handler = logging.FileHandler(self.log_file_name, mode='w' if self.is_training else 'a')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(FORMATTER)
         LOGGER.addHandler(file_handler)
@@ -94,10 +99,10 @@ class Agent:
         num_actions = self.env.action_space.n
         num_states = self.env.observation_space.shape[0]
 
-        self.policy_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_dueling_dqn).to(DEVICE)
+        self.policy_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_dueling_dqn).to(self.device)
 
         if self.is_training:
-            self.target_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_double_dqn).to(DEVICE)
+            self.target_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_double_dqn).to(self.device)
             self.target_dqn.load_state_dict(self.policy_dqn.state_dict())
             self.optimizer = torch.optim.Adam(self.policy_dqn.parameters(), lr=self.learning_rate)
         else:
@@ -106,23 +111,36 @@ class Agent:
 
         for episode in range(self.episode_max_num):
             state, _ = self.env.reset()
-            state = torch.tensor(state, dtype=torch.float, device=DEVICE)
+            state = torch.tensor(state, dtype=torch.float, device=self.device)
 
             terminated = False
             episode_reward = 0.0
 
-            # Gain experience
             while not terminated and episode_reward < self.episode_max_reward:
                 action: Tensor = self.__select_action_epsilon_greedy(state)
                 new_state, reward, terminated, truncated, info = self.env.step(action.item())
                 episode_reward += reward
 
-                new_state = torch.tensor(new_state, dtype=torch.float, device=DEVICE)
-                reward = torch.tensor(reward, dtype=torch.float, device=DEVICE)
+                new_state = torch.tensor(new_state, dtype=torch.float, device=self.device)
+                reward = torch.tensor(reward, dtype=torch.float, device=self.device)
 
                 if self.is_training:
                     self.exp_buffer.append(Experience((state, action, new_state, reward, terminated)))
                     step_count += 1
+
+                    # If enough experience has been collected
+                    if len(self.exp_buffer) > self.mini_batch_size:
+                        mini_batch = self.exp_buffer.sample(self.mini_batch_size)
+                        self.optimize(mini_batch)
+
+                        # Decay epsilon
+                        self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
+                        epsilon_history.append(self.epsilon)
+
+                        # Copy policy network to target network after a certain number of steps
+                        if step_count > self.steps_to_sync_target_net:
+                            self.target_dqn.load_state_dict(self.policy_dqn.state_dict())
+                            step_count = 0
 
                 state = new_state
 
@@ -143,24 +161,10 @@ class Agent:
                     self.save_graph(rewards_per_episode, epsilon_history)
                     last_graph_update_time = current_time
 
-                # If enough experience has been collected
-                if len(self.exp_buffer) > self.mini_batch_size:
-                    mini_batch = self.exp_buffer.sample(self.mini_batch_size)
-                    self.optimize(mini_batch)
-
-                    # Decay epsilon
-                    self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
-                    epsilon_history.append(self.epsilon)
-
-                    # Copy policy network to target network after a certain number of steps
-                    if step_count > self.steps_to_sync_target_net:
-                        self.target_dqn.load_state_dict(self.policy_dqn.state_dict())
-                        step_count = 0
-
     def __select_action_epsilon_greedy(self, state: Tensor) -> Tensor:
         if self.is_training and random.random() < self.epsilon:
             action = self.env.action_space.sample()
-            return torch.tensor(action, dtype=torch.int64, device=DEVICE)
+            return torch.tensor(action, dtype=torch.int64, device=self.device)
         else:
             with torch.no_grad():
                 return self.policy_dqn(state.unsqueeze(dim=0)).squeeze().argmax()
@@ -196,7 +200,7 @@ class Agent:
         actions = torch.stack(actions)
         new_states = torch.stack(new_states)
         rewards = torch.stack(rewards)
-        terminations = torch.tensor(terminations).float().to(DEVICE)
+        terminations = torch.tensor(terminations).float().to(self.device)
 
         with torch.no_grad():
             if self.enable_double_dqn:
@@ -218,8 +222,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train or test model.')
     parser.add_argument('--config_set', type=str, help='Config set name')
     parser.add_argument('--train', help='Training mode', action='store_true')
+    parser.add_argument('--device', type=str, choices=['cuda', 'cpu'], default='cuda', help='Device name (cpu or cuda)')
     args = parser.parse_args()
 
-    dql = Agent(config_set_name=args.config_set, is_training=True if args.train else False,
+    dql = Agent(config_set_name=args.config_set, device_name=args.device, is_training=True if args.train else False,
                 do_render=False if args.train else True)
     dql.run()
