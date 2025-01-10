@@ -204,5 +204,7 @@ In summary:
 - log: new best episode reward
 - log: episode reward - episode
 - graph: rewards sum per episode - episode number
+- graph: rolling average sum per episode - episode number
+- graph: epsilon - episode number
 - graph: number of steps - episode number
 - graph: episode time - episode number

@@ -14,6 +14,52 @@ cartpole1:
     enable_double_dqn: True
     enable_dueling_dqn: True
     seed: 23
+cartpoleOptuna1:
+    env_id: CartPole-v1
+    exp_buffer_size: 100_000
+    epsilon_init: 1
+    episode_max_reward: 100_000
+    episode_max_num: 10_000
+    enable_double_dqn: True
+    enable_dueling_dqn: True
+    seed: 23
+    optuna:
+        mini_batch_size:
+            values:
+                - 8
+                - 16
+                - 32
+                - 64
+                - 128
+        epsilon_decay:
+            min: 0.95
+            max: 0.9995
+            step: 0.0001
+        epsilon_min:
+            min: 0.001
+            max: 0.01
+            step: 0.001
+        steps_to_sync_target_net:
+           values:
+               - 10
+               - 100
+               - 200
+               - 500
+               - 1000
+        learning_rate:
+            min: 0.001
+            max: 0.01
+            step: 0.001
+        discount_factor:
+            min: 0.1
+            max: 0.99
+            step: 0.01
+        fc1_nodes:
+            values:
+                - 64
+                - 128
+                - 256
+                - 512
 flappybird1:
     env_id: FlappyBird-v0
     exp_buffer_size: 100000
