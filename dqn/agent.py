@@ -319,7 +319,7 @@ def objective(trial: optuna.Trial, args: Namespace):
 
 def optimize(args: Namespace) -> None:
     study: optuna.Study = optuna.create_study(direction='maximize')
-    study.optimize(lambda trial: objective(trial, args), n_trails=100)
+    study.optimize(lambda trial: objective(trial, args), 100)
     best_trial = study.best_trial
 
     best_params_file_name = f'{args.config_set}_best_params.json'
