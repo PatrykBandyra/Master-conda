@@ -318,7 +318,11 @@ def objective(trial: optuna.Trial, args: Namespace):
 
 
 def optimize(args: Namespace) -> None:
-    study: optuna.Study = optuna.create_study(direction='maximize')
+    study_name = f'{args.config_set}_study'
+    db_file_name = f'{OUTPUT_DIR}/{study_name}.db'
+    storage_url = f'sqlite:///{db_file_name}'
+    study: optuna.Study = optuna.create_study(study_name=study_name, storage=storage_url, load_if_exists=True,
+                                              direction='maximize')
     study.optimize(lambda trial: objective(trial, args), 100)
     best_trial = study.best_trial
 

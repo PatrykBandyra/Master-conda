@@ -31,6 +31,7 @@ cartpoleOptuna1:
                 - 32
                 - 64
                 - 128
+                - 256
         epsilon_decay:
             min: 0.95
             max: 0.9995
