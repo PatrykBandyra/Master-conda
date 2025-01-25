@@ -1,6 +1,7 @@
 cartpole1:
     env_id: CartPole-v1
-    exp_buffer_size: 100000
+    implementation: di_engine
+    exp_buffer_size: 100_000
     mini_batch_size: 64
     epsilon_init: 1
     epsilon_decay: 0.9995
@@ -16,6 +17,7 @@ cartpole1:
     seed: 23
 cartpoleOptuna1:
     env_id: CartPole-v1
+    implementation: custom
     exp_buffer_size: 100_000
     epsilon_init: 1
     episode_max_reward: 100_000
@@ -41,12 +43,12 @@ cartpoleOptuna1:
             max: 0.01
             step: 0.001
         steps_to_sync_target_net:
-           values:
-               - 10
-               - 100
-               - 200
-               - 500
-               - 1000
+            values:
+                - 10
+                - 100
+                - 200
+                - 500
+                - 1000
         learning_rate:
             min: 0.001
             max: 0.01
@@ -61,8 +63,26 @@ cartpoleOptuna1:
                 - 128
                 - 256
                 - 512
+cartpole2:
+    env_id: CartPole-v1
+    implementation: custom
+    exp_buffer_size: 100_000
+    epsilon_init: 1
+    episode_max_reward: 100_000
+    episode_max_num: 10_000
+    enable_double_dqn: True
+    enable_dueling_dqn: True
+    learning_rate: 0.002
+    discount_factor: 0.99
+    steps_to_sync_target_net: 1_000
+    mini_batch_size: 128
+    epsilon_decay: 0.9735999999999999
+    epsilon_min: 0.009000000000000001
+    fc1_nodes: 64
+    seed: 23
 flappybird1:
     env_id: FlappyBird-v0
+    implementation: custom
     exp_buffer_size: 100000
     mini_batch_size: 32
     epsilon_init: 1

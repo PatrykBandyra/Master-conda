@@ -5,7 +5,7 @@ import os
 import random
 from argparse import Namespace
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Literal
 
 import flappy_bird_gymnasium  # noqa: F401 - used indirectly by gymnasium
 import gymnasium as gym
@@ -17,6 +17,7 @@ import torch
 import yaml
 from torch import nn
 from torch.types import Tensor
+from ding.model.template.q_learning import DQN as DiDQN
 
 from dqn import DQN
 from experience_buffer import ExperienceBuffer, Experience
@@ -88,6 +89,7 @@ class Agent:
             self.epsilon_min: float = cfg[EM]
             self.fc1_nodes: int = cfg[FC1N]
 
+        self.implementation: Literal['custom', 'di_engine'] = cfg['implementation']
         self.exp_buffer_size: int = cfg['exp_buffer_size']
         self.epsilon_init: float = cfg['epsilon_init']
         self.episode_max_reward: float = cfg['episode_max_reward']
@@ -151,10 +153,17 @@ class Agent:
         num_actions = self.env.action_space.n
         num_states = self.env.observation_space.shape[0]
 
-        self.policy_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_dueling_dqn).to(self.device)
+        if self.implementation == 'custom':
+            self.policy_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_dueling_dqn).to(self.device)
+        else:
+            self.policy_dqn = DiDQN(num_states, num_actions, dueling=self.enable_dueling_dqn).to(self.device)
 
         if self.is_training:
-            self.target_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_double_dqn).to(self.device)
+            if self.implementation == 'custom':
+                self.target_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_double_dqn).to(self.device)
+            else:
+                self.target_dqn = DiDQN(num_states, num_actions, dueling=self.enable_dueling_dqn).to(self.device)
+
             self.target_dqn.load_state_dict(self.policy_dqn.state_dict())
             self.optimizer = torch.optim.Adam(self.policy_dqn.parameters(), lr=self.learning_rate)
         else:
