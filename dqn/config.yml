@@ -1,6 +1,6 @@
 cartpole1:
     env_id: CartPole-v1
-    implementation: di_engine
+    implementation: custom
     exp_buffer_size: 100_000
     mini_batch_size: 64
     epsilon_init: 1
@@ -80,9 +80,93 @@ cartpole2:
     epsilon_min: 0.009000000000000001
     fc1_nodes: 64
     seed: 23
+cartpole3:
+    env_id: CartPole-v1
+    implementation: di_engine
+    exp_buffer_size: 100_000
+    epsilon_init: 1
+    episode_max_reward: 100_000
+    episode_max_num: 10_000
+    enable_double_dqn: True
+    enable_dueling_dqn: True
+    learning_rate: 0.002
+    discount_factor: 0.99
+    steps_to_sync_target_net: 1_000
+    mini_batch_size: 128
+    epsilon_decay: 0.9735999999999999
+    epsilon_min: 0.009000000000000001
+    fc1_nodes: 64
+    seed: 23
+cartpoleOptuna2:
+    env_id: CartPole-v1
+    implementation: di_engine
+    exp_buffer_size: 100_000
+    epsilon_init: 1
+    episode_max_reward: 100_000
+    episode_max_num: 10_000
+    enable_double_dqn: True
+    enable_dueling_dqn: True
+    seed: 23
+    optuna:
+        mini_batch_size:
+            values:
+                - 8
+                - 16
+                - 32
+                - 64
+                - 128
+                - 256
+        epsilon_decay:
+            min: 0.95
+            max: 0.9995
+            step: 0.0001
+        epsilon_min:
+            min: 0.001
+            max: 0.01
+            step: 0.001
+        steps_to_sync_target_net:
+            values:
+                - 10
+                - 100
+                - 200
+                - 500
+                - 1000
+        learning_rate:
+            min: 0.001
+            max: 0.01
+            step: 0.001
+        discount_factor:
+            min: 0.1
+            max: 0.99
+            step: 0.01
+        fc1_nodes:
+            values:
+                - 64
+                - 128
+                - 256
+                - 512
 flappybird1:
     env_id: FlappyBird-v0
     implementation: custom
+    exp_buffer_size: 100000
+    mini_batch_size: 32
+    epsilon_init: 1
+    epsilon_decay: 0.99_99_5
+    epsilon_min: 0.05
+    steps_to_sync_target_net: 10
+    learning_rate: 0.0001
+    discount_factor: 0.99
+    episode_max_reward: 100_000
+    episode_max_num: 100_000
+    fc1_nodes: 512
+    env_make_params:
+        use_lidar: False
+    enable_double_dqn: True
+    enable_dueling_dqn: True
+    seed: 23
+flappybird2:
+    env_id: FlappyBird-v0
+    implementation: di_engine
     exp_buffer_size: 100000
     mini_batch_size: 32
     epsilon_init: 1

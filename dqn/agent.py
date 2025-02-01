@@ -5,7 +5,7 @@ import os
 import random
 from argparse import Namespace
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Literal
+from typing import Dict, Any, List
 
 import flappy_bird_gymnasium  # noqa: F401 - used indirectly by gymnasium
 import gymnasium as gym
@@ -15,9 +15,9 @@ import numpy as np
 import optuna
 import torch
 import yaml
+from ding.model.template.q_learning import DQN as DiDQN
 from torch import nn
 from torch.types import Tensor
-from ding.model.template.q_learning import DQN as DiDQN
 
 from dqn import DQN
 from experience_buffer import ExperienceBuffer, Experience
@@ -89,7 +89,7 @@ class Agent:
             self.epsilon_min: float = cfg[EM]
             self.fc1_nodes: int = cfg[FC1N]
 
-        self.implementation: Literal['custom', 'di_engine'] = cfg['implementation']
+        self.custom_impl: bool = cfg['implementation'] == 'custom'
         self.exp_buffer_size: int = cfg['exp_buffer_size']
         self.epsilon_init: float = cfg['epsilon_init']
         self.episode_max_reward: float = cfg['episode_max_reward']
@@ -150,16 +150,16 @@ class Agent:
         if self.trial is not None:
             LOGGER.info(f'Training starting for trial {self.trial.number}')
 
-        num_actions = self.env.action_space.n
-        num_states = self.env.observation_space.shape[0]
+        num_actions = int(self.env.action_space.n)
+        num_states = int(self.env.observation_space.shape[0])
 
-        if self.implementation == 'custom':
+        if self.custom_impl:
             self.policy_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_dueling_dqn).to(self.device)
         else:
             self.policy_dqn = DiDQN(num_states, num_actions, dueling=self.enable_dueling_dqn).to(self.device)
 
         if self.is_training:
-            if self.implementation == 'custom':
+            if self.custom_impl:
                 self.target_dqn = DQN(num_states, num_actions, self.fc1_nodes, self.enable_double_dqn).to(self.device)
             else:
                 self.target_dqn = DiDQN(num_states, num_actions, dueling=self.enable_dueling_dqn).to(self.device)
@@ -245,7 +245,10 @@ class Agent:
             return torch.tensor(action, dtype=torch.int64, device=self.device)
         else:
             with torch.no_grad():
-                return self.policy_dqn(state.unsqueeze(dim=0)).squeeze().argmax()
+                if self.custom_impl:
+                    return self.policy_dqn(state.unsqueeze(dim=0)).squeeze().argmax()
+                else:
+                    return self.policy_dqn(state.unsqueeze(dim=0))['logit'].squeeze().argmax()
 
     def __save_graph(self, rewards_per_episode, epsilon_history, steps_per_episode, time_per_episode):
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
@@ -304,16 +307,29 @@ class Agent:
         rewards = torch.stack(rewards)
         terminations = torch.tensor(terminations).float().to(self.device)
 
-        with torch.no_grad():
+        with (torch.no_grad()):
             if self.enable_double_dqn:
-                best_actions_from_policy = self.policy_dqn(new_states).argmax(dim=1)
-                target_q = rewards + (1 - terminations) * self.discount_factor * self.target_dqn(new_states) \
-                    .gather(dim=1, index=best_actions_from_policy.unsqueeze(dim=1)).squeeze()
+                if self.custom_impl:
+                    best_actions_from_policy = self.policy_dqn(new_states).argmax(dim=1)
+                    target_q = rewards + (1 - terminations) * self.discount_factor * self.target_dqn(new_states) \
+                        .gather(dim=1, index=best_actions_from_policy.unsqueeze(dim=1)).squeeze()
+                else:
+                    best_actions_from_policy = self.policy_dqn(new_states)['logit'].argmax(dim=1)
+                    target_q = rewards + (1 - terminations) * self.discount_factor * \
+                               self.target_dqn(new_states)['logit'] \
+                                   .gather(dim=1, index=best_actions_from_policy.unsqueeze(dim=1)).squeeze()
             else:
-                target_q = rewards + (1 - terminations) * self.discount_factor * \
-                           self.target_dqn(new_states).max(dim=1)[0]
+                if self.custom_impl:
+                    target_q = rewards + (1 - terminations) * self.discount_factor * \
+                               self.target_dqn(new_states).max(dim=1)[0]
+                else:
+                    target_q = rewards + (1 - terminations) * self.discount_factor * \
+                               self.target_dqn(new_states)['logit'].max(dim=1)[0]
 
-        current_q = self.policy_dqn(states).gather(dim=1, index=actions.unsqueeze(dim=1)).squeeze()
+        if self.custom_impl:
+            current_q = self.policy_dqn(states).gather(dim=1, index=actions.unsqueeze(dim=1)).squeeze()
+        else:
+            current_q = self.policy_dqn(states)['logit'].gather(dim=1, index=actions.unsqueeze(dim=1)).squeeze()
         loss = self.loss_fn(current_q, target_q)
         self.optimizer.zero_grad()
         loss.backward()
